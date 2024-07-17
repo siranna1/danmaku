@@ -18,6 +18,12 @@ http://osabisi.sakura.ne.jp/m2/
 ドット絵ツール
 EDGE
 http://takabosoft.com/edge
+
+j2130　福頼雄倫
+
+プレイヤーと敵とそれぞれの弾に色の要素をいれて、異なる色同士だけ当たるようにしました。
+後半に出てくる敵の数を増やしました
+
 */
 
 #include "DxLib.h"
@@ -65,6 +71,7 @@ http://takabosoft.com/edge
 
 #define BORN1 20 // 敵出現頻度
 #define BORN2 1000 // ボス出現頻度
+const int LEVEL_MAX_SCORE = 100000;
 
 int t;//時間
 
@@ -120,6 +127,7 @@ struct Player
 	int hp;//残機
 	double range;//当たり判定
 	bool isDamage;//被弾中ならtrue、被弾中でないならfalse
+	int maxdistance;
 	color col;
 };
 
@@ -135,6 +143,7 @@ struct PlayerShot
 	double range;//当たり判定
 	int img;//画像
 	int power;//ショットの威力
+	int distance;
 	bool isExist;//存在したらtrue、いなかったらfalse
 	color col;
 };
@@ -217,6 +226,7 @@ void Init()
 	player.hp = 5;//残機5からスタート
 
 	player.range = 3;//当たり判定
+	player.maxdistance = 200;
 
 	player.isDamage = false;
 
@@ -332,6 +342,7 @@ void MakeShot(double speed, double angle, int power, double range, color col)
 	shot[i].power = power;
 	shot[i].range = range;
 	shot[i].col = col;
+	shot[i].distance = 0;
 
 	shot[i].img = shot_img;
 	switch (col)
@@ -372,6 +383,8 @@ void MakeWayShot(double speed, int power, double range, int way, double wide_ang
 	}
 }
 
+bool ispushspace = false;
+
 //自機の移動
 void ActionPlayer()
 {
@@ -400,8 +413,9 @@ void ActionPlayer()
 		player.y += speed;
 
 	int changecolor = 10;
-	if (CheckHitKey(KEY_INPUT_SPACE)&& t % changecolor == 0)
+	if (CheckHitKey(KEY_INPUT_SPACE) && !ispushspace)
 	{
+		ispushspace = true;
 		switch ((player.col + 1) % 2)
 		{
 		case 0:
@@ -411,6 +425,10 @@ void ActionPlayer()
 			player.col = blue;
 			break;
 		}
+	}
+	if (!CheckHitKey(KEY_INPUT_SPACE))
+	{
+		ispushspace = false;
 	}
 
 	//ショットを撃つ
@@ -453,6 +471,13 @@ void MoveShot()
 
 		x += speed * cos( angle );
 		y += speed * sin( angle );
+
+		shot[i].distance += sqrt(speed * cos(angle) * speed * cos(angle) + speed * sin(angle) * speed * sin(angle));
+		if (shot[i].distance > player.maxdistance)
+		{
+			shot[i].isExist = false;
+			
+		}
 
 		//弾が画面外に出た場合、弾を消す
 		if( x < MIN_X || x > MAX_X || y < MIN_Y || y > MAX_Y)
@@ -681,8 +706,12 @@ void EraseBullet()
 void MakeEnemy()
 {
 	int i;
+	int enemyborn = (LEVEL_MAX_SCORE - score) > 0 ? (LEVEL_MAX_SCORE - score) * 40 / LEVEL_MAX_SCORE + BORN1 - 10 : BORN1 - 10;
+	enemyborn = BORN1 - score / 1000;
+	if (enemyborn < 5)
+		enemyborn = 5;
 	//ザコ敵 下側ランダム方向に直進
-	if( t % BORN1 == 0 && !isBossExist )
+	if( t % enemyborn == 0 && !isBossExist )
 	{
 		for(i = 0;i < MAX_ENEMY; i++)
 		{
@@ -707,6 +736,15 @@ void MakeEnemy()
 		enemy[i].range = 15;//当たり判定の大きさ
 
 		enemy[i].action = STRAIGHT;//決まった角度に直進
+		switch (GetRand(1))
+		{
+		case 0:
+			enemy[i].action = STRAIGHT;
+			break;
+		case 1:
+			enemy[i].action = CIRCLE;
+			break;
+		}
 		
 		enemy[i].img = enemy_img;
 
@@ -785,19 +823,26 @@ void ActionEnemy()
 		if( !enemy[i].isExist )//敵がいれば次へ
 			continue;
 
-		switch(enemy[i].action)
+		switch (enemy[i].action)
 		{
 		case STOP://何もしない
+			enemy[i].x += sin(OMEGA(t));
 			break;
 
 		case STRAIGHT://決まった方向に直進
 
-			enemy[i].x += enemy[i].speed * cos( enemy[i].angle );
-			enemy[i].y += enemy[i].speed * sin( enemy[i].angle );
+			enemy[i].x += enemy[i].speed * cos(enemy[i].angle);
+			enemy[i].y += enemy[i].speed * sin(enemy[i].angle);
 
 			break;
+		case CIRCLE:
+			enemy[i].angle += OMEGA(1);
 
+			enemy[i].x += enemy[i].speed * cos(enemy[i].angle);
+			enemy[i].y += enemy[i].speed * sin(enemy[i].angle);
+			break;
 		}
+		
 
 		x = enemy[i].x;
 		y = enemy[i].y;
@@ -820,7 +865,10 @@ void ActionEnemy()
 		switch(enemy[i].action)
 		{
 		case STOP:
-			fire = 40;
+			if (score > LEVEL_MAX_SCORE)
+				fire = 5;
+			else
+				fire = (LEVEL_MAX_SCORE - score) * 40 / LEVEL_MAX_SCORE + 5;
 			x = enemy[i].x;
 			y = enemy[i].y;
 			speed = 2.0;
@@ -837,11 +885,11 @@ void ActionEnemy()
 			break;
 
 		case STRAIGHT:
-			const int LEVEL_MAX_SCORE = 100000;
+			
 			if( score > LEVEL_MAX_SCORE )
 				fire = 20;
 			else
-				fire = (LEVEL_MAX_SCORE - score) * 80 / LEVEL_MAX_SCORE + 20;
+				fire = (LEVEL_MAX_SCORE - score) * 60 / LEVEL_MAX_SCORE + 20;
 			x = enemy[i].x;
 			y = enemy[i].y;
 			speed = 2.0;
