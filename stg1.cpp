@@ -69,9 +69,17 @@ http://takabosoft.com/edge
 int t;//時間
 
 int enemy_img;//敵の画像
+int enemyred_img;
 int boss_img;
+int bossblue_img;
 int bullet_img1,bullet_img2;//弾の画像
-int shot_img;//自機ショットの画像
+int bulletblue_img1, bulletblue_img2;
+int shot_img;//自機ショットの画
+int shotred_img;
+int shotblue_img;
+int playerred_img;
+int playerblue_img;
+
 int board_img;//枠の画像
 int back_img;//背景の画像
 int effect_img[17];//エフェクトの画像
@@ -83,6 +91,26 @@ int bom_snd1;//爆発音1
 int bom_snd2;//爆発音2
 int up_snd;//パワーアップ音
 
+enum color
+{
+	red = 0,
+	blue = 1
+};
+
+color GetRandomColor()
+{
+	switch (GetRand(1))
+	{
+	case 0:
+		return red;
+		break;
+
+	case 1:
+		return blue;
+		break;
+	}
+}
+
 //自機
 struct Player
 {
@@ -92,6 +120,7 @@ struct Player
 	int hp;//残機
 	double range;//当たり判定
 	bool isDamage;//被弾中ならtrue、被弾中でないならfalse
+	color col;
 };
 
 struct Player player;
@@ -107,6 +136,7 @@ struct PlayerShot
 	int img;//画像
 	int power;//ショットの威力
 	bool isExist;//存在したらtrue、いなかったらfalse
+	color col;
 };
 
 struct PlayerShot shot[MAX_PLAYER_SHOT];
@@ -124,7 +154,7 @@ struct Enemy
 	int action;//敵の行動
 	bool isExist;//存在したらtrue、いなかったらfalse
 	bool isBoss;//ボスならtrue
-
+	color col;
 };
 
 struct Enemy enemy[MAX_ENEMY];
@@ -142,7 +172,7 @@ struct Bullet
 	double range ;//当たり判定
 	int img;//画像
 	bool isExist;//存在したらtrue、いなかったらfalse
-
+	color col;
 
 };
 
@@ -169,6 +199,7 @@ void initEnemy(int i)
 	enemy[i].hp = 0;
 	enemy[i].isExist = false;
 	enemy[i].isBoss = false;
+	enemy[i].col = GetRandomColor();
 }
 //初期化
 void Init()
@@ -219,11 +250,19 @@ void LoadData()
 {
 	//画像読み込み
 	player.img = LoadGraph("player.png");
+	playerred_img = LoadGraph("playerred.png");
+	playerblue_img = LoadGraph("playerblue.png");
 	enemy_img = LoadGraph("smallenemy.png");
+	enemyred_img = LoadGraph("smallenemyred.png");
 	boss_img = LoadGraph("boss.png");
+	bossblue_img = LoadGraph("bossblue.png");
 	bullet_img1 = LoadGraph("bullet1.png");
+	bulletblue_img1 = LoadGraph("bullet1blue.png");
 	bullet_img2 = LoadGraph("bullet2.png");
+	bulletblue_img2 = LoadGraph("bullet2blue.png");
 	shot_img = LoadGraph("shot.png");
+	shotblue_img = LoadGraph("shotblue.png");
+	shotred_img = LoadGraph("shotred.png");
 	board_img = LoadGraph("board.png");
 	back_img = LoadGraph("back.png");
 	LoadDivGraph("effect.png",17,8,3,64,64,effect_img);
@@ -270,7 +309,7 @@ void MakeEffect(int x, int y, int max)
 }
 
 //自機ショットの生成
-void MakeShot(double speed, double angle, int power, double range)
+void MakeShot(double speed, double angle, int power, double range, color col)
 {
 	int i;
 
@@ -292,15 +331,25 @@ void MakeShot(double speed, double angle, int power, double range)
 	shot[i].angle = angle;
 	shot[i].power = power;
 	shot[i].range = range;
+	shot[i].col = col;
 
 	shot[i].img = shot_img;
+	switch (col)
+	{
+	case red:
+		shot[i].img = shotred_img;
+		break;
+	case blue:
+		shot[i].img = shotblue_img;
+		break;
+	}
 
 	PlaySoundMem( shot_snd , DX_PLAYTYPE_BACK ) ;//発射音
 
 }
 
 //多方向に自機ショットを発射
-void MakeWayShot(double speed, int power, double range, int way, double wide_angle, double main_angle)
+void MakeWayShot(double speed, int power, double range, int way, double wide_angle, double main_angle, color col)
 {
 	int i; 
 
@@ -308,7 +357,7 @@ void MakeWayShot(double speed, int power, double range, int way, double wide_ang
 	
 	if (way == 1)
 	{
-		MakeShot(speed, main_angle, power, range);
+		MakeShot(speed, main_angle, power, range, col);
 		return;
 	}
 	
@@ -319,7 +368,7 @@ void MakeWayShot(double speed, int power, double range, int way, double wide_ang
 		else
 			w_angle = main_angle + i * wide_angle / ( way - 1 ) - wide_angle / 2;//発射角度
 
-		MakeShot(speed,w_angle,power,range);
+		MakeShot(speed,w_angle,power,range, col);
 	}
 }
 
@@ -350,12 +399,26 @@ void ActionPlayer()
 	if( CheckHitKey(KEY_INPUT_DOWN) )
 		player.y += speed;
 
+	int changecolor = 10;
+	if (CheckHitKey(KEY_INPUT_SPACE)&& t % changecolor == 0)
+	{
+		switch ((player.col + 1) % 2)
+		{
+		case 0:
+			player.col = red;
+			break;
+		case 1:
+			player.col = blue;
+			break;
+		}
+	}
+
 	//ショットを撃つ
 	if( CheckHitKey(KEY_INPUT_Z)  && t % fire == 0 )
 	{
 		//敵を10倒すごとに+1方向(最大6方向)
 		way = score > LEVEL_UP_SCORE * 5 ? way : score / LEVEL_UP_SCORE + 1;
-		MakeWayShot(s_speed,power,range,way,OMEGA( (way - 1) * 20 ),s_angle);
+		MakeWayShot(s_speed,power,range,way,OMEGA( (way - 1) * 20 ),s_angle, player.col);
 	}
 
 	//移動を制限
@@ -420,6 +483,8 @@ void JudgeShot()
 		{
 			if( !shot[j].isExist )
 				continue;
+			if (shot[j].col == enemy[i].col)
+				continue;
 
 			x = shot[j].x - enemy[i].x;
 			y = shot[j].y - enemy[i].y;
@@ -459,6 +524,17 @@ void DrawPlayer()
 {
 	int i;
 
+	switch (player.col)
+	{
+	case red:
+		player.img = playerred_img;
+		break;
+	case blue:
+		player.img = playerblue_img;
+		break;
+
+	}
+
 	//自機の表示
 	DrawRotaGraphF( (float)player.x, (float)player.y, 1.0, 0, player.img, TRUE ) ;
 
@@ -479,7 +555,7 @@ double TargetAnglePlayer(double x, double y)
 //弾幕の生成
 
 //方向弾(x,y:発射地点, speed:速度, angle:角度)
-void MakeBullet(double x, double y, double speed, double angle, double range, int img)
+void MakeBullet(double x, double y, double speed, double angle, double range, int img, color col)
 {
 	int i; 
 
@@ -505,12 +581,14 @@ void MakeBullet(double x, double y, double speed, double angle, double range, in
 
 	bullet[i].img = img;//画像の代入
 
+	bullet[i].col = col;
+
 	PlaySoundMem( bullet_snd , DX_PLAYTYPE_BACK ) ;//発射音
 
 }
 
 //way弾(way:何方向に打つか, angle:扇形の角度, main_angle:扇形がどの方向を向くか)
-void MakeWayBullet(double x, double y, double speed, int way, double wide_angle ,double main_angle, double range,int img)
+void MakeWayBullet(double x, double y, double speed, int way, double wide_angle ,double main_angle, double range,int img, color col)
 {
 	int i; 
 
@@ -523,7 +601,7 @@ void MakeWayBullet(double x, double y, double speed, int way, double wide_angle 
 		else
 			w_angle = main_angle + i * wide_angle / ( way - 1 ) - wide_angle / 2;//発射角度
 
-		MakeBullet(x,y,speed,w_angle,range,img);
+		MakeBullet(x,y,speed,w_angle,range,img, col);
 	}
 
 }
@@ -569,6 +647,8 @@ void JudgeBullet()
 	for(i = 0; i < MAX_BULLET; i++)
 	{
 		if( !bullet[i].isExist )
+			continue;
+		if (bullet[i].col == player.col)
 			continue;
 
 		x = bullet[i].x - player.x;
@@ -627,8 +707,18 @@ void MakeEnemy()
 		enemy[i].range = 15;//当たり判定の大きさ
 
 		enemy[i].action = STRAIGHT;//決まった角度に直進
-
+		
 		enemy[i].img = enemy_img;
+
+		switch (enemy[i].col)
+		{
+		case red:
+			enemy[i].img = enemyred_img;
+			break;
+		case blue:
+			enemy[i].img = enemy_img;
+			break;
+		}
 	}
 
 	//大型敵 座標固定
@@ -660,6 +750,15 @@ void MakeEnemy()
 		enemy[i].action = STOP;//座標固定
 
 		enemy[i].img = boss_img;
+		switch (enemy[i].col)
+		{
+		case red:
+			enemy[i].img = boss_img;
+			break;
+		case blue:
+			enemy[i].img = bossblue_img;
+			break;
+		}
 	}
 }
 
@@ -707,6 +806,17 @@ void ActionEnemy()
 		if( x < MIN_X || x > MAX_X || y < MIN_Y || y > MAX_Y)
 			enemy[i].isExist = false;
 
+		int img1, img2;
+		switch (enemy[i].col)
+		{
+		case red:
+			img1 = bullet_img1;
+			img2 = bullet_img2;
+			break;
+		case blue:
+			img1 = bulletblue_img1;
+			img2 = bulletblue_img2;
+		}
 		switch(enemy[i].action)
 		{
 		case STOP:
@@ -719,9 +829,10 @@ void ActionEnemy()
 			//fire回のループごとに弾を発射
 			if( t % fire == 0 )//3種類の弾幕
 			{
-				MakeWayBullet(x+140,y,1.5,3,OMEGA( 60 ),OMEGA(90)+OMEGA(30)*sin(OMEGA(t)),3,bullet_img2);
-				MakeWayBullet(x-140,y,1.5,3,OMEGA( 60 ),OMEGA(90)+OMEGA(30)*sin(OMEGA(t)),3,bullet_img2);
-				MakeWayBullet(x,y,speed,way,OMEGA(5),TargetAnglePlayer(x,y),range,bullet_img1);
+				
+				MakeWayBullet(x+140,y,1.5,3,OMEGA( 60 ),OMEGA(90)+OMEGA(30)*sin(OMEGA(t)),3,img2, enemy[i].col);
+				MakeWayBullet(x-140,y,1.5,3,OMEGA( 60 ),OMEGA(90)+OMEGA(30)*sin(OMEGA(t)),3,img2, enemy[i].col);
+				MakeWayBullet(x,y,speed,way,OMEGA(5),TargetAnglePlayer(x,y),range,img1, enemy[i].col);
 			}
 			break;
 
@@ -742,11 +853,11 @@ void ActionEnemy()
 				switch(GetRand(1))//どちらかの弾幕を発射
 				{
 				case 0:
-					MakeWayBullet(x,y,speed,way,OMEGA(30),TargetAnglePlayer(x,y),range,bullet_img1);
+					MakeWayBullet(x,y,speed,way,OMEGA(30),TargetAnglePlayer(x,y),range,img1, enemy[i].col);
 					break;
 
 				case 1:
-					MakeWayBullet(x,y,speed,2*way,OMEGA(360),OMEGA( GetRand(360) ),range,bullet_img1);
+					MakeWayBullet(x,y,speed,2*way,OMEGA(360),OMEGA( GetRand(360) ),range,img1, enemy[i].col);
 					break;
 				}
 			}
